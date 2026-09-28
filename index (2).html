@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2563eb">
+  <title>Asistente del Maestro PWA</title>
+  
+  <!-- Manifest & Favicon -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍎</text></svg>">
+  
+  <!-- Tailwind CSS CDN para estilos rápidos -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 flex flex-col justify-between">
+
+  <!-- Header -->
+  <header class="bg-blue-600 text-white p-4 shadow-md">
+    <div class="max-w-4xl mx-auto flex justify-between items-center">
+      <h1 class="text-xl font-bold flex items-center gap-2">
+        <span>🍎</span> Panel del Maestro
+      </h1>
+      <span id="status-badge" class="px-2 py-1 text-xs rounded-full bg-yellow-400 text-slate-900 font-semibold">
+        Verificando conexión...
+      </span>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-4xl mx-auto p-4 w-full flex-grow">
+    
+    <!-- Banner de Instalación PWA -->
+    <div id="install-banner" class="hidden bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-6 rounded shadow-sm flex justify-between items-center">
+      <div>
+        <p class="font-bold">¡Instala la App!</p>
+        <p class="text-sm">Accede rápido y trabaja sin conexión a internet desde tu dispositivo.</p>
+      </div>
+      <button id="btn-install" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition">
+        Instalar
+      </button>
+    </div>
+
+    <!-- Dashboard Quick Access -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <h2 class="text-slate-500 text-sm font-medium">Asistencia Hoy</h2>
+        <p class="text-2xl font-bold text-slate-800 mt-1">28 / 30</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <h2 class="text-slate-500 text-sm font-medium">Tareas Pendientes</h2>
+        <p class="text-2xl font-bold text-slate-800 mt-1">12 Por Calificar</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <h2 class="text-slate-500 text-sm font-medium">Estado PWA</h2>
+        <p id="sw-status" class="text-sm font-semibold text-blue-600 mt-2">Cargando Service Worker...</p>
+      </div>
+    </div>
+
+    <!-- Registro Rápido (Guardado Local) -->
+    <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+      <h2 class="text-lg font-bold mb-4 text-slate-800">Anotaciones / Recordatorios Rápidos</h2>
+      <div class="flex gap-2 mb-4">
+        <input type="text" id="note-input" placeholder="Escribe una nota rápida (ej. Avisar examen el viernes)..." class="flex-grow p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <button id="btn-add-note" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg font-medium transition">
+          Guardar
+        </button>
+      </div>
+      <ul id="notes-list" class="divide-y divide-slate-100 text-sm">
+        <!-- Notas se cargarán dinámicamente -->
+      </ul>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-slate-100 border-t border-slate-200 text-center py-4 text-xs text-slate-500">
+    <p>Aplicación PWA del Maestro &copy; 2026 — Lista para trabajar Offline</p>
+  </footer>
+
+  <!-- Script Lógica PWA -->
+  <script>
+    // 1. Registro del Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => {
+            console.log('Service Worker registrado con éxito:', reg.scope);
+            document.getElementById('sw-status').textContent = 'Activo y Offline Listo ✔️';
+          })
+          .catch(err => {
+            console.error('Error al registrar Service Worker:', err);
+            document.getElementById('sw-status').textContent = 'Error al activar SW ❌';
+          });
+      });
+    }
+
+    // 2. Control del Estado de Red (Online / Offline)
+    function updateOnlineStatus() {
+      const badge = document.getElementById('status-badge');
+      if (navigator.onLine) {
+        badge.textContent = 'En línea 🌐';
+        badge.className = 'px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 font-semibold';
+      } else {
+        badge.textContent = 'Sin conexión 📡 (Offline)';
+        badge.className = 'px-2 py-1 text-xs rounded-full bg-amber-100 text-amber-800 font-semibold';
+      }
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    // 3. Prompt de Instalación PWA
+    let deferredPrompt;
+    const installBanner = document.getElementById('install-banner');
+    const btnInstall = document.getElementById('btn-install');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBanner.classList.remove('hidden');
+    });
+
+    btnInstall.addEventListener('click', async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          console.log('El usuario instaló la PWA');
+        }
+        deferredPrompt = null;
+        installBanner.classList.add('hidden');
+      }
+    });
+
+    // 4. Lógica Básica de Notas (LocalStorage)
+    const noteInput = document.getElementById('note-input');
+    const btnAddNote = document.getElementById('btn-add-note');
+    const notesList = document.getElementById('notes-list');
+
+    function loadNotes() {
+      const notes = JSON.parse(localStorage.getItem('teacher_notes') || '[]');
+      notesList.innerHTML = notes.map((note, index) => `
+        <li class="py-2 flex justify-between items-center">
+          <span>${note}</span>
+          <button onclick="deleteNote(${index})" class="text-red-500 hover:text-red-700 text-xs">Eliminar</button>
+        </li>
+      `).join('');
+    }
+
+    btnAddNote.addEventListener('click', () => {
+      const text = noteInput.value.trim();
+      if (text) {
+        const notes = JSON.parse(localStorage.getItem('teacher_notes') || '[]');
+        notes.push(text);
+        localStorage.setItem('teacher_notes', JSON.stringify(notes));
+        noteInput.value = '';
+        loadNotes();
+      }
+    });
+
+    window.deleteNote = function(index) {
+      const notes = JSON.parse(localStorage.getItem('teacher_notes') || '[]');
+      notes.splice(index, 1);
+      localStorage.setItem('teacher_notes', JSON.stringify(notes));
+      loadNotes();
+    };
+
+    loadNotes();
+  </script>
+</body>
+</html>
